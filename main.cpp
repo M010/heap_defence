@@ -18,11 +18,17 @@ void clear_screen()
 int main()
 {
 	Frame<10, 15> frame;
+	initscr();
+	noecho();
 	while (1)
 	{
 		frame.step();
 		frame.print();
+		char ch = getch();
+		putchar(ch);
+		frame.get_ch(ch);
 		refresh();
 	}
+	endwin();
 	return 0;
 }

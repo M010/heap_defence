@@ -6,6 +6,10 @@
 
 #IncludeRegexTransform: 
 
+/home/moh/CLionProjects/untitled7/Frame.cpp
+Frame.h
+/home/moh/CLionProjects/untitled7/Frame.h
+
 /home/moh/CLionProjects/untitled7/Frame.h
 vector
 -
@@ -16,6 +20,12 @@ random
 cassert
 -
 algorithm
+-
+ncurses.h
+-
+chrono
+-
+thread
 -
 Tile.h
 /home/moh/CLionProjects/untitled7/Tile.h
@@ -34,6 +44,8 @@ iostream
 thread
 -
 chrono
+-
+ncurses.h
 -
 Frame.h
 /home/moh/CLionProjects/untitled7/Frame.h

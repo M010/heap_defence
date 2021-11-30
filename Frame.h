@@ -5,18 +5,26 @@
 #include <random>
 #include <cassert>
 #include <algorithm>
+#include <ncurses.h>
+#include <chrono>
+#include <thread>
 #include "Tile.h"
 
-template <uint Rows, uint Cols>
+using std::string;
+
+template <int Rows, int Cols>
 class Frame
 {
 //	using Row = std::vector<char>;
 	using Row = std::string;
 	using Field = std::vector<Row>;
-
+	using Position = std::pair<int, int>;
+	Position person = { Cols/2, Rows-1};
+	static const char person_frame = 'P';
 
 	const int rows_count;
 	const int cols_size;
+	int key = -1;
 	Field field;
 	std::mt19937 gen;
 
@@ -25,8 +33,8 @@ public:
 			rows_count(Rows), cols_size(Cols),
 			field(Field(rows_count, Row(Cols, ' ')))
 	{
-		static_assert(Rows , "Rows must be greater then 0");
-		static_assert(Cols , "Cols must be greater then 0");
+		static_assert(Rows > 0, "Rows must be greater then 0");
+		static_assert(Cols > 0, "Cols must be greater then 0");
 	}
 
 	void clean_rows(){
@@ -38,8 +46,12 @@ public:
 		field.insert(field.begin(), tmp.begin(), tmp.end());
 	}
 
-	void generate_box()
+	void get_ch(int ch)
 	{
+		key = ch;
+	}
+
+	void generate_box() {
 		int drop_line = gen() % cols_size;
 		field[0][drop_line] = '0';
 	}
@@ -53,37 +65,100 @@ public:
 				char& upper_pixel = field[i_y - 1][i_x];
 
 				if(' ' == pixel && '0' == upper_pixel)
-				{
 					std::swap(pixel, upper_pixel);
-				}
 			}
 		}
+	}
+
+	char& get_by_position(Position p)
+	{
+		return field[p.second][p.first];
+	}
+
+	Position sum_positions(const Position& lhs, const Position& rhs)
+	{
+		return {lhs.first + rhs.first, lhs.second + rhs.second};
+	}
+
+	void move_person()
+	{
+		Position diff{0, 0};
+
+		if (key == 100)
+		{
+			diff.first++;
+		} else if (key == 97)
+		{
+			diff.first--;
+		} else if (key == 115)
+		{
+			diff.second++;
+		} else if (key == 119)
+		{
+			diff.second--;
+		}
+		Position new_position = sum_positions(person, diff);
+
+		if (new_position.first < 0 || new_position.first == cols_size)
+			return;
+		if (new_position.second < 0 || new_position.second == rows_count)
+			return;
+
+		if (get_by_position(new_position) != '0')
+		{
+			person = new_position;
+		} else if (is_moveble(new_position, diff))
+		{
+			char& move_to = get_by_position(sum_positions(new_position, diff));
+			std::swap(get_by_position(new_position), move_to);
+			person = new_position;
+		}
+	}
+
+	bool is_moveble(const Position& position, const Position& diff)
+	{
+		if((position.second != 0 &&
+		  '0' == get_by_position({position.first, position.second - 1}))
+		  || position.first == 0
+		  || position.first == cols_size - 1)
+		  return false;
+		else if(get_by_position(sum_positions(position, diff)) == '0')
+			return false;
+		return true;
 	}
 
 	void step()
 	{
+		using namespace std::chrono;
+
+		auto start = steady_clock::now();
 		static int i;
 		i++;
+		move_person();
 		if(!(i % 4))
 			drop_box();
 		if(!(i % 13))
 			generate_box();
-
 		clean_rows();
+		auto end = steady_clock::now();
+		milliseconds m = duration_cast<milliseconds>(start-end);
+		std::this_thread::sleep_for(milliseconds{100} - m);
 	}
 
 	void print(){
-		using std::cout;
-
-		cout << std::string(field[0].size(), '_') << '\n';
+		move(0,0);
+		printw("%s\n" , string(field[0].size(), 'T').c_str());
 		for(uint i_y = 0; i_y < rows_count; i_y++)
 		{
 			for(int i_x = 0; i_x < cols_size; i_x++) {
-				cout << field[i_y][i_x];
+				if(person == std::pair<int, int>(i_x, i_y))
+					addch(person_frame);
+				else
+					addch(field[i_y][i_x]);
 			}
-			cout << "|\n";
+			printw("|\n");
 		}
-		cout << std::string(field[0].size(), 'T') << '\n';
-		cout << std::flush;
+		printw("%s\n" , string(field[0].size(), 'T').c_str());
+		printw("x:%d y:%d\n", person.first, person.second);
 	}
 };

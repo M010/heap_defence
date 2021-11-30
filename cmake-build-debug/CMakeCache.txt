@@ -159,7 +159,7 @@ CMAKE_PROJECT_DESCRIPTION:STATIC=
 CMAKE_PROJECT_HOMEPAGE_URL:STATIC=
 
 //Value Computed by CMake
-CMAKE_PROJECT_NAME:STATIC=untitled7
+CMAKE_PROJECT_NAME:STATIC=cpp_stack_attack
 
 //Path to a program.
 CMAKE_RANLIB:FILEPATH=/usr/bin/ranlib
@@ -228,6 +228,12 @@ ProcessorCount_cmd_nproc:FILEPATH=/usr/bin/nproc
 
 //Path to a program.
 ProcessorCount_cmd_sysctl:FILEPATH=/usr/sbin/sysctl
+
+//Value Computed by CMake
+cpp_stack_attack_BINARY_DIR:STATIC=/home/moh/CLionProjects/untitled7/cmake-build-debug
+
+//Value Computed by CMake
+cpp_stack_attack_SOURCE_DIR:STATIC=/home/moh/CLionProjects/untitled7
 
 //Value Computed by CMake
 untitled7_BINARY_DIR:STATIC=/home/moh/CLionProjects/untitled7/cmake-build-debug
