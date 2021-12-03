@@ -150,7 +150,7 @@ static void clear_rows(Box **field) {
 }
 
 int main() {
-    srand(DWT->CYCCNT);
+//    srand(DWT->CYCCNT);
 
     osMessageQueueId_t event_queue = osMessageQueueNew(8, sizeof(GameEvent), NULL);
     GameState *game = allocGameState();
