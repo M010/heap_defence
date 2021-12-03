@@ -1,12 +1,12 @@
 //
 // Created by moh on 30.11.2021.
 //
-#include "../flipperzero-firmware/core/furi.h"
-#include "../flipperzero-firmware/applications/gui/gui.h"
-#include "../flipperzero-firmware/applications/input/input.h"
-#include "../flipperzero-firmware/lib/STM32CubeWB/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h"
-#include "../flipperzero-firmware/applications/input/input.h"
-#include "../flipperzero-firmware/firmware/targets/f7/furi-hal/furi-hal-resources.h"
+#include "flipperzero-firmware/core/furi.h"
+#include "flipperzero-firmware/applications/gui/gui.h"
+#include "flipperzero-firmware/applications/input/input.h"
+#include "flipperzero-firmware/lib/STM32CubeWB/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h"
+#include "flipperzero-firmware/applications/input/input.h"
+#include "flipperzero-firmware/firmware/targets/f7/furi-hal/furi-hal-resources.h"
 #include <stdlib.h>
 #include <string.h>
 //#include <stdlib.h>
@@ -94,39 +94,8 @@ void game_state_destroy(GameState *game_state) {
 	free(game_state);
 }
 
-static void heap_defense_timer_callback(osMessageQueueId_t event_queue) {
-	furi_assert(event_queue);
-
-	GameEvent event = {EventGameTick, 0};
-	osMessageQueuePut(event_queue, &event, 0, 0);
-}
-
 static Pixel convert_box_position(byte x, byte y) {
 	return (Pixel){.x = x * 10, y = y * 10};
-}
-
-static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
-	int timeout = 25;
-	const GameState *game_state = acquire_mutex((ValueMutex *)mutex, timeout);
-	if (!game_state)
-		return;
-
-	for (int y = 0; y < Y_FIELD_SIZE; ++y) {
-		for (int x = 0; x < X_FIELD_SIZE; ++x) {
-			Pixel top_left = convert_box_position(x, y);
-			if (game_state->field[y][x].state) {
-				canvas_draw_box(canvas, top_left.x, top_left.y, BOX_WIDTH, BOX_HEIGHT);
-			}
-		}
-	}
-	release_mutex((ValueMutex *)mutex, game_state);
-}
-
-static void heap_defense_input_callback(InputEvent* input_event, osMessageQueueId_t event_queue) {
-	furi_assert(event_queue);
-
-	GameEvent event = {EventKeyPress, *input_event};
-	osMessageQueuePut(event_queue, &event, 0, osWaitForever);
 }
 
 static void generate_box(GameState const * game_state) {
@@ -161,35 +130,38 @@ static void clear_rows(Box **field) {
 	}
 }
 
-int heap_defense_game_loop(GameState *game, osMessageQueueId_t event_queue) {
-	int errors = 0;
-	GameEvent event;
+static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
+	int timeout = 25;
+	const GameState *game_state = acquire_mutex((ValueMutex *)mutex, timeout);
+	if (!game_state)
+		return;
 
-	while (game->game_status != StatusGameExit) {
-		if (osMessageQueueGet(event_queue, &event, NULL, 100) != osOK) {
-			furi_log_print(FURI_LOG_ERROR, "queue_get_failed");
-			++errors;
-		}
-		errors = 0;
-		if (event.type == EventKeyPress) {
-			switch (event.input.key) {
-				case InputKeyBack:
-					game->game_status = StatusGameExit;
-					break;
-				default:
-					break;
+	canvas_clear(canvas);
+	canvas_set_color(canvas, ColorBlack);
+	for (int y = 0; y < Y_FIELD_SIZE; ++y) {
+		for (int x = 0; x < X_FIELD_SIZE; ++x) {
+			Pixel top_left = convert_box_position(x, y);
+			if (game_state->field[y][x].state) {
+				canvas_draw_box(canvas, top_left.x, top_left.y, BOX_WIDTH, BOX_HEIGHT);
 			}
-			/// move player
-		} else if (event.type == EventGameTick) {
-			/// apply logic
-			//move_person();
-			drop_box(game);
-			//drop_person();
-			clear_rows(game->field);
-			generate_box(game);
 		}
 	}
-	return 0;
+	release_mutex((ValueMutex *)mutex, game_state);
+}
+
+
+static void heap_defense_input_callback(InputEvent* input_event, osMessageQueueId_t event_queue) {
+	furi_assert(event_queue);
+
+	GameEvent event = {EventKeyPress, *input_event};
+	osMessageQueuePut(event_queue, &event, 0, osWaitForever);
+}
+
+static void heap_defense_timer_callback(osMessageQueueId_t event_queue) {
+	furi_assert(event_queue);
+
+	GameEvent event = {EventGameTick, 0};
+	osMessageQueuePut(event_queue, &event, 0, 0);
 }
 
 int main() {
@@ -215,7 +187,38 @@ int main() {
     // Open GUI and register view_port
     Gui* gui = furi_record_open("gui");
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
-	heap_defense_game_loop(game, event_queue);
+
+    int errors = 0;
+    GameEvent event;
+
+    while (game->game_status != StatusGameExit && errors < 10) {
+    	if (osMessageQueueGet(event_queue, &event, NULL, 100) != osOK) {
+    		furi_log_print(FURI_LOG_ERROR, "queue_get_failed");
+    		++errors;
+    	}
+    	GameState *game_state = (GameState *)acquire_mutex_block(&state_mutex);
+    	errors = 0;
+    	if (event.type == EventKeyPress) {
+    		/// move player
+    		switch (event.input.key) {
+    			case InputKeyBack:
+    				game->game_status = StatusGameExit;
+    				break;
+				default:
+					break;
+    		}
+    	} else if (event.type == EventGameTick) {
+    		/// apply logic
+    		//move_person();
+    		drop_box(game_state);
+    		//drop_person();
+    		clear_rows(game_state->field);
+    		generate_box(game_state);
+    	}
+		release_mutex(&state_mutex, game_state);
+    	view_port_update(view_port);
+    }
+
 	osTimerDelete(timer);
 	view_port_enabled_set(view_port, false);
 	gui_remove_view_port(gui, view_port);
