@@ -20,7 +20,8 @@ class Frame
 	using Field = std::vector<Row>;
 	using Position = std::pair<int, int>;
 	Position person = { Cols/2, Rows-1};
-	static const char person_frame = 'P';
+	static const char person_frame = 'M';
+	static const char person_head = 'o';
 
 	const int rows_count;
 	const int cols_size;
@@ -46,10 +47,7 @@ public:
 		field.insert(field.begin(), tmp.begin(), tmp.end());
 	}
 
-	void get_ch(int ch)
-	{
-		key = ch;
-	}
+
 
 	void generate_box() {
 		int drop_line = gen() % cols_size;
@@ -83,6 +81,8 @@ public:
 	void move_person()
 	{
 		Position diff{0, 0};
+		key = getch();
+		bool can_move = true;
 
 		if (key == 100)
 		{
@@ -90,13 +90,20 @@ public:
 		} else if (key == 97)
 		{
 			diff.first--;
-		} else if (key == 115)
-		{
-			diff.second++;
+//		} else if (key == 115)
+//		{
+//			diff.second++;
 		} else if (key == 119)
 		{
+			can_move = on_ground();
 			diff.second--;
 		}
+		else
+			return;
+
+		if(!can_move)
+			return;
+
 		Position new_position = sum_positions(person, diff);
 
 		if (new_position.first < 0 || new_position.first == cols_size)
@@ -127,6 +134,32 @@ public:
 		return true;
 	}
 
+	bool on_ground()
+	{
+		bool in_last_row = (person.second == rows_count - 1);
+		if (in_last_row)
+			return true;
+
+		auto after_drop = sum_positions(person, {0, 1});
+		bool is_flying = (get_by_position(after_drop) == ' ');
+		return !is_flying;
+	}
+
+
+	void drop_person()
+	{
+		bool in_last_row = (person.second == rows_count - 1);
+		if(in_last_row)
+			return;
+
+		auto after_drop = sum_positions(person, {0, 1});
+		bool is_flying = (get_by_position(after_drop) == ' ');
+
+		if(is_flying)
+			person = after_drop;
+
+	}
+
 	void step()
 	{
 		using namespace std::chrono;
@@ -135,14 +168,17 @@ public:
 		static int i;
 		i++;
 		move_person();
-		if(!(i % 4))
+		if(!(i % 3))
+		{
 			drop_box();
+			drop_person();
+		}
 		if(!(i % 13))
 			generate_box();
 		clean_rows();
 		auto end = steady_clock::now();
 		milliseconds m = duration_cast<milliseconds>(start-end);
-		std::this_thread::sleep_for(milliseconds{100} - m);
+		std::this_thread::sleep_for(milliseconds{150} - m);
 	}
 
 	void print(){
@@ -153,6 +189,9 @@ public:
 			for(int i_x = 0; i_x < cols_size; i_x++) {
 				if(person == std::pair<int, int>(i_x, i_y))
 					addch(person_frame);
+				else if (person.second != 0 &&
+				std::make_pair(person.first, person.second - 1) == std::pair<int, int>(i_x, i_y))
+					addch(person_head);
 				else
 					addch(field[i_y][i_x]);
 			}

@@ -1,4 +1,0 @@
-/home/moh/CLionProjects/untitled7/cmake-build-debug/CMakeFiles/rebuild_cache.dir
-/home/moh/CLionProjects/untitled7/cmake-build-debug/CMakeFiles/edit_cache.dir
-/home/moh/CLionProjects/untitled7/cmake-build-debug/CMakeFiles/curs.dir
-/home/moh/CLionProjects/untitled7/cmake-build-debug/CMakeFiles/untitled7.dir

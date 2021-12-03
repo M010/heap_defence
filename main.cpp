@@ -17,16 +17,15 @@ void clear_screen()
 
 int main()
 {
-	Frame<10, 15> frame;
+	Frame<7, 12> frame;
 	initscr();
 	noecho();
+	timeout(150);
 	while (1)
 	{
 		frame.step();
 		frame.print();
-		char ch = getch();
-		putchar(ch);
-		frame.get_ch(ch);
+//		frame.get_ch(ch);
 		refresh();
 	}
 	endwin();
