@@ -83,8 +83,11 @@ void game_state_destroy(GameState *game_state) {
 	free(game_state);
 }
 
-static void generate_box(GameState const * game_state) {
-	memset(game_state->field[0] + rand() % X_FIELD_SIZE, 0xff, sizeof(Box));
+static void generate_box(GameState const *game_state) {
+	int top_row = 0;
+	int x_offset = rand() % X_FIELD_SIZE;
+	Box box = game_state->field[top_row][x_offset];
+	memset(&box, 0xff, sizeof(Box));
 }
 
 static void heap_swap(Box **first, Box **second) {
