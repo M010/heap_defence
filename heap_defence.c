@@ -1,18 +1,11 @@
 //
 // Created by moh on 30.11.2021.
 //
-#define DEVELOP
-#ifdef DEVELOP
-#include "flipperzero-firmware/core/furi.h"
-#include "flipperzero-firmware/applications/gui/gui.h"
-#include "flipperzero-firmware/applications/input/input.h"
-#include "flipperzero-firmware/lib/STM32CubeWB/Middlewares/Third_Party/FreeRTOS/Source/CMSIS_RTOS_V2/cmsis_os2.h"
-#include "flipperzero-firmware/applications/input/input.h"
-#include "flipperzero-firmware/firmware/targets/f7/furi-hal/furi-hal-resources.h"
+
 #include <stdlib.h>
 #include <string.h>
 //#include <stdlib.h>
-#elifdef TEST
+
 #include "../flipperzero-firmware/core/furi.h"
 #include "../flipperzero-firmware/applications/gui/gui.h"
 #include "../flipperzero-firmware/applications/input/input.h"
@@ -21,21 +14,6 @@
 #include "../flipperzero-firmware/firmware/targets/f7/furi-hal/furi-hal-resources.h"
 #include <stdlib.h>
 #include <string.h>
-#endif
-#ifdef _MLX_
-//#include "minilibx/mlx.h"
-
-void *window;
-void *mlx;
-
-static char empty_str[X_FIELD_SIZE];
-//    memset(empty_str, ' ', sizeof(char));
-
-typedef enum {
-	ColorBlackKostyl = 0,
-	ColorWhiteKosyyl = 0xFFFFFF,
-	} Colors;
-#endif
 
 #define Y_SIZE 128
 #define X_SIZE 64
@@ -146,6 +124,8 @@ static void clear_rows(Box **field) {
 }
 
 static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
+    static int i = 0;
+    i++;
 	int timeout = 25;
 	const GameState *game_state = acquire_mutex((ValueMutex *)mutex, timeout);
 	if (!game_state)
@@ -153,6 +133,9 @@ static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
 
 	canvas_clear(canvas);
 	canvas_set_color(canvas, ColorBlack);
+    if(i % 20 < 10) {
+        canvas_draw_box(canvas, 0, 0, BOX_WIDTH, BOX_HEIGHT);
+    }
 	for (int y = 0; y < Y_FIELD_SIZE; ++y) {
 		for (int x = 0; x < X_FIELD_SIZE; ++x) {
 			if (game_state->field[y][x].state) {
@@ -167,19 +150,24 @@ static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
 static void heap_defense_input_callback(InputEvent* input_event, osMessageQueueId_t event_queue) {
 	furi_assert(event_queue);
 
-	GameEvent event = {EventKeyPress, *input_event};
+	GameEvent event;
+    event.input = *input_event;
+    event.type =EventKeyPress ;
 	osMessageQueuePut(event_queue, &event, 0, osWaitForever);
 }
 
 static void heap_defense_timer_callback(osMessageQueueId_t event_queue) {
 	furi_assert(event_queue);
 
-	GameEvent event = {EventGameTick, 0};
+	GameEvent event;
+    event.type = EventGameTick;
+//    event.input = nu
 	osMessageQueuePut(event_queue, &event, 0, 0);
 }
 
-int main() {
-//    srand(DWT->CYCCNT);
+
+int32_t heap_defence_app(void* p){
+    srand(DWT->CYCCNT);
 
     osMessageQueueId_t event_queue = osMessageQueueNew(8, sizeof(GameEvent), NULL);
     GameState *game = allocGameState();
@@ -221,15 +209,15 @@ int main() {
 				default:
 					break;
     		}
-    	} /* else if (event.type == EventGameTick) {
+    	} else if (event.type == EventGameTick) {
     		/// apply logic
     		//move_person();
-    		drop_box(game_state);
+//    		drop_box(game_state);
     		//drop_person();
-    		clear_rows(game_state->field);
-    		generate_box(game_state);
-    	}*/
-    	release_mutex(&state_mutex, game_state);
+//    		clear_rows(game_state->field);
+//    		generate_box(game_state);
+    	}
+		release_mutex(&state_mutex, game_state);
     	view_port_update(view_port);
     }
 
