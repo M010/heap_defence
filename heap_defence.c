@@ -18,13 +18,13 @@
 #define Y_FIELD_SIZE 6
 #define Y_LAST (Y_FIELD_SIZE - 1)
 #define X_FIELD_SIZE 12
-#define X_LAST (Y_FIELD_SIZE - 1)
+#define X_LAST (X_FIELD_SIZE - 1)
 
 #define BOX_HEIGHT 10
 #define BOX_WIDTH 10
-#define TIMER_UPDATE_FREQ 10
+#define TIMER_UPDATE_FREQ 6
 #define BOX_DROP_RATE 5
-#define BOX_GENERATION_RATE 10
+#define BOX_GENERATION_RATE 7
 
 #define PERSON_HEIGHT (BOX_HEIGHT * 2) // TODO Каждый раз будет заново считать
 #define PERSON_WIDTH BOX_WIDTH
@@ -137,25 +137,30 @@ static void heap_swap(Box* first, Box* second) {
     *first = *second;
     *second = temp;
 }
+void dec_offset(byte * p_offset)
+{
+   if(*p_offset)
+       (*p_offset)--;
+}
 
 static void drop_box(GameState* game_state) {
     furi_assert(game_state);
 
-    for(int x = 0; x < X_FIELD_SIZE; x++) {
-        byte *of = &(game_state->field[Y_LAST][x].offset);
-        *of = *of ? (*of - 1) : *of;
-    }
 
     for(int y = Y_LAST; y > 0; y--) {
         for(int x = 0; x < X_FIELD_SIZE; x++) {
             Box* cur_cell = game_state->field[y] + x;
             Box* upper_cell = game_state->field[y - 1] + x;
 
+            if(y == Y_LAST) {
+                dec_offset(&(cur_cell->offset));
+            }
+
             byte* offset = &(upper_cell->offset);
-            if(*offset != 0) (*offset)--;
+            dec_offset(offset);
 
             if(cur_cell->state == 0 && (upper_cell->state != 0 && *offset == 0)) {
-                *offset = (y == Y_LAST) ? BOX_HEIGHT : 0;
+                *offset = BOX_HEIGHT;
                 heap_swap(cur_cell, upper_cell); //TODO: Think about
             }
         }
@@ -212,11 +217,19 @@ static void move_person(Person *person, InputEvent *input) {
  *
  */
 
-static void draw_box(Canvas* canvas, Box* box, int tick, int x, int y) {
-    if(!box) return;
-    if(!box || !(box->state)) return;
-    canvas_draw_box(
-        canvas, x * BOX_HEIGHT, y * BOX_WIDTH + BOX_WIDTH - box->offset, BOX_WIDTH, BOX_HEIGHT);
+static void draw_box(Canvas* canvas, Box *box, int x, int y) {
+
+    if (!box->state) {
+        return;
+    }
+    byte y_screen = y * BOX_WIDTH - box->offset;
+    byte x_screen = x * BOX_HEIGHT;
+
+    canvas_draw_frame(
+        canvas, x_screen,
+        y_screen,
+        BOX_WIDTH,
+        BOX_HEIGHT);
 }
 
 static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
@@ -226,9 +239,9 @@ static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
 
     canvas_clear(canvas);
     canvas_set_color(canvas, ColorBlack);
-    for(int y = 1; y < Y_FIELD_SIZE; ++y) {
+    for(int y = 0; y < Y_FIELD_SIZE; ++y) {
         for(int x = 0; x < X_FIELD_SIZE; ++x) {
-            draw_box(canvas, &(game_state->field[y][x]), game_state->tick_count, x, y);
+            draw_box(canvas, &(game_state->field[y][x]), x, y);
         }
     }
     canvas_draw_frame(
