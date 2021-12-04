@@ -89,7 +89,6 @@ typedef struct {
 } GameEvent;
 
 /**
- *
  * #Construct / Destroy
  */
 GameState* allocGameState() {
@@ -115,7 +114,6 @@ void game_state_destroy(GameState* game_state) {
 }
 
 /**
- *
  * #Box logic
  */
 
@@ -212,13 +210,10 @@ static void move_person(Person *person, InputEvent *input) {
 }
 
 /**
- *
  * #Callback
- *
  */
 
 static void draw_box(Canvas* canvas, Box *box, int x, int y) {
-
     if (!box->state) {
         return;
     }
