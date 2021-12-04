@@ -21,7 +21,7 @@
 #define X_FIELD_SIZE 12
 #define BOX_HEIGHT 10
 #define BOX_WIDTH 10
-#define TIMER_UPDATE_FREQ 1
+#define TIMER_UPDATE_FREQ 4
 //#define GENERATE_BOX(x) { x->field[0][rand() % X_FIELD_SIZE]; }
 
 typedef u_int8_t byte;
@@ -201,6 +201,7 @@ int32_t heap_defence_app(void* p){
     	if (osMessageQueueGet(event_queue, &event, NULL, 100) != osOK) {
     		furi_log_print(FURI_LOG_ERROR, "queue_get_failed");
     		++errors;
+            continue;
     	}
     	GameState *game_state = (GameState *)acquire_mutex_block(&state_mutex);
     	errors = 0;
@@ -213,7 +214,7 @@ int32_t heap_defence_app(void* p){
 				default:
 					break;
     		}
-    	} else if (event.type == EventGameTick) {
+    	} if (event.type == EventGameTick) {
             i++;
     		/// apply logic
     		//move_person();
