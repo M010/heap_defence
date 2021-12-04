@@ -17,11 +17,11 @@
 
 #define Y_SIZE 128
 #define X_SIZE 64
-#define Y_FIELD_SIZE 8
+#define Y_FIELD_SIZE 6
 #define X_FIELD_SIZE 12
 #define BOX_HEIGHT 10
 #define BOX_WIDTH 10
-#define TIMER_UPDATE_FREQ 30
+#define TIMER_UPDATE_FREQ 1
 //#define GENERATE_BOX(x) { x->field[0][rand() % X_FIELD_SIZE]; }
 
 typedef u_int8_t byte;
@@ -70,7 +70,7 @@ GameState *allocGameState() {
     game_state->game_status = StatusWaitingForStart;
 	game_state->field = furi_alloc(sizeof(Box *) * Y_FIELD_SIZE);
 	for (int y = 0; y < Y_FIELD_SIZE; ++y) {
-		furi_alloc(sizeof(Box) * X_FIELD_SIZE);
+		game_state->field[y] = furi_alloc(sizeof(Box) * X_FIELD_SIZE);
 	}
     return game_state;
 }
@@ -83,49 +83,45 @@ void game_state_destroy(GameState *game_state) {
 	free(game_state);
 }
 
+
+
 static void generate_box(GameState const *game_state) {
 	int top_row = 0;
 	int x_offset = rand() % X_FIELD_SIZE;
     game_state->field[top_row][x_offset].state = 1;
 }
 
-static void heap_swap(Box **first, Box **second) {
-	Box *temp = *first;
+static void heap_swap(Box *first, Box *second) {
+	Box temp = *first;
 	*first = *second;
 	*second = temp;
 }
 
 static void drop_box(GameState *game_state) {
-	for (int y = 0; y < Y_FIELD_SIZE - 1; ++y) {
-		for (int x = 0; x < X_FIELD_SIZE; ++x) {
-			Box *current_cell = game_state->field[y] + x;
-			Box *lower_cell = game_state->field[y + 1] + x;
-			if (current_cell->state && lower_cell->state == 0) {
-				heap_swap(&current_cell, &lower_cell);
-			}
-		}
-	}
+
+    for(int i_y = Y_FIELD_SIZE - 1; i_y > 0; i_y--)
+    {
+        for(int i_x = 0; i_x < X_FIELD_SIZE; i_x++)
+        {
+            Box *current_cell = &(game_state->field[i_y][i_x]);
+            Box *upper_cell = &(game_state->field[i_y - 1][i_x]);
+
+            if (current_cell->state == 0 && upper_cell->state) {
+                heap_swap(current_cell, upper_cell);
+            }
+        }
+    }
 }
+
 
 static void clear_rows(Box **field) {
 	int bottom_row = Y_FIELD_SIZE - 1;
-	int flag = 0;
-	for (int y = bottom_row; y > 0; --y) {
-		for (int x = 0; x < X_FIELD_SIZE; ++x) {
-			if (field[x][y].state == 0) {
-				flag = 1;
-                return ;
-			}
-		}
-		if (flag == 1) {
-			continue;
-		}
-
-        Box *row =  field[bottom_row];
+    for (int x = 0; x < X_FIELD_SIZE; ++x) {
+        if(field[bottom_row][x].state == 0) {
+            return;
+        }
+    }
         memset(field[bottom_row], 0, sizeof(Box) * X_FIELD_SIZE);
-        memmove(field, field + 1, sizeof(Box *) * (Y_FIELD_SIZE - 1));
-        *field = row;
-	}
 }
 
 static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
@@ -172,8 +168,11 @@ static void heap_defense_timer_callback(osMessageQueueId_t event_queue) {
 
 
 int32_t heap_defence_app(void* p){
+    static int i = 0;
     srand(DWT->CYCCNT);
+//    furi_print("HIIIIIIIIIIIIIIIIIIIIIIIIIIIIIII!");
 
+    furi_log_print(FURI_LOG_ERROR, "asdfjsaklllkfjjaksdlfjkasdfjaskldjfkas\n");
     osMessageQueueId_t event_queue = osMessageQueueNew(8, sizeof(GameEvent), NULL);
     GameState *game = allocGameState();
 
@@ -215,12 +214,17 @@ int32_t heap_defence_app(void* p){
 					break;
     		}
     	} else if (event.type == EventGameTick) {
+            i++;
     		/// apply logic
     		//move_person();
-//    		drop_box(game_state);
+            if(i%5 == 0) {
+                drop_box(game_state);
+            }
     		//drop_person();
-//    		clear_rows(game_state->field);
-    		generate_box(game_state);
+    		clear_rows(game_state->field);
+            if(i%10 == 0) {
+                generate_box(game_state);
+            }
     	}
 		release_mutex(&state_mutex, game_state);
     	view_port_update(view_port);
