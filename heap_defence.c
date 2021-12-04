@@ -46,11 +46,14 @@ typedef enum {
 	PersonStatusDead,
 	PersonStatusWalk,
 	PersonStatusJump,
-	PersonStatusPush
+	PersonStatusPush,
+	PersonStatusIdle
 } PersonStatuses;
 
 typedef struct {
 	byte	is_going_left;
+	byte	is_jumping;
+	byte	is_walking;
 	byte	screen_x;
 	byte	screen_y;
 	PersonStatuses status;
@@ -137,7 +140,7 @@ static void drop_box(GameState *game_state) {
 		return;
 	}
 
-    for(int y = Y_FIELD_SIZE - 2; y > 0; y--) {
+    for(int y = Y_FIELD_SIZE - 1; y > 0; y--) {
         for(int x = 0; x < X_FIELD_SIZE; x++) {
             Box *current_cell = game_state->field[y] + x;
             Box *upper_cell = game_state->field[y - 1] + x;
@@ -164,26 +167,34 @@ static void clear_rows(Box **field) {
  * #Person logic
  */
 
-//static void move_person(GameState *game_state) {
-//	Person *person = game_state->person;
-//
-//	byte new_X_position = person->screen_x + (person->is_going_left) * PERSON_STEP_PIX;
-//	switch (person->status) {
-//		case PersonStatusJump: {
-//			byte new_X_position = person->screen_x + (person->is_going_left) * PERSON_STEP_PIX;
-//			byte new_Y_position = person->screen_y + PERSON_STEP_PIX;
-//			break;
-//		}
-//		default: {
-//			byte new_X_position = person->screen_x + (person->is_going_left) * PERSON_STEP_PIX;
-//			break;
-//		}
-//	}
-//
-//
-//	//byte new_Y_position = person->screen_y ;
-//
-//}
+static void move_person(Person *person, InputEvent *input) {
+
+	if (person->screen_y % BOX_HEIGHT) {
+		person->screen_y += 2;
+		return;
+	}
+	if (person->is_walking || person->screen_x % BOX_WIDTH) {
+		person->screen_x += person->is_going_left ? -2 : 2;
+		person->is_walking = 0;
+	}
+	switch (input->key) {
+		case InputKeyUp:
+			person->screen_y += 2;// TODO bug prone
+			break;
+		case InputKeyDown:
+			person->screen_y += 0;
+			break;
+		case InputKeyLeft:
+			person->is_going_left = 1;
+			person->is_walking = 1;
+			break;
+		case InputKeyRight:
+			person->is_going_left = 0;
+			person->is_walking = 1;
+		default:
+			break;
+	}
+}
 
 /**
  *
@@ -241,7 +252,6 @@ int32_t heap_defence_app(void* p) {
     }
 
     ViewPort* view_port = view_port_alloc();
-    furi_assert(view_port);
     view_port_draw_callback_set(view_port, heap_defense_render_callback, &state_mutex);
     view_port_input_callback_set(view_port, heap_defense_input_callback, event_queue);
 	osTimerId_t timer =
@@ -251,41 +261,17 @@ int32_t heap_defence_app(void* p) {
     Gui* gui = furi_record_open("gui");
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
-    GameEvent event;
-    while (game->game_status != StatusGameExit) {
+    GameEvent event = {.type = 0, .input = {0}};
+    while (event.input.key != InputKeyBack) { /// ATTENTION
     	if (osMessageQueueGet(event_queue, &event, NULL, 100) != osOK) {
-    		furi_log_print(FURI_LOG_ERROR, "queue_get_failed");
 			continue;
     	}
     	GameState *game_state = (GameState *)acquire_mutex_block(&state_mutex);
     	if (event.type == EventKeyPress) {
-    		/// move player
-    		switch (event.input.key) {
-    			case InputKeyBack:
-    				game_state->game_status = StatusGameExit;
-    				break;
-				case InputKeyUp:
-					game_state->person->screen_y -= PERSON_STEP_PIX;// TODO bug prone
-					break;
-				case InputKeyDown:
-					game_state->person->screen_y += PERSON_STEP_PIX;
-					break;
-				case InputKeyLeft:
-					game_state->person->is_going_left = -1;
-					game_state->person->screen_x -= PERSON_STEP_PIX;
-					break;
-				case InputKeyRight:
-					game_state->person->is_going_left = 1;
-					game_state->person->screen_x += PERSON_STEP_PIX;
-				default:
-					break;
-    		}
+    		move_person(game_state, &(event.input));
     	} else if (event.type == EventGameTick) {
-    		/// apply logic
     		drop_box(game_state);
-    		//drop_person();
     		generate_box(game_state);
-            // из-за новой логики можно чистить в конце цикла
     		clear_rows(game_state->field);
     		game_state->tick_count++;
     	}
