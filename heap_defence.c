@@ -82,6 +82,7 @@ typedef struct {
     EventType	type;
     InputEvent 	input;
 } GameEvent;
+
 /**
  *
  * #Construct / Destroy
@@ -136,18 +137,17 @@ static void drop_box(GameState *game_state) {
 		return;
 	}
 
-    for(int y = Y_FIELD_SIZE - 1; y > 0; y--) {
+    for(int y = Y_FIELD_SIZE - 2; y > 0; y--) {
         for(int x = 0; x < X_FIELD_SIZE; x++) {
             Box *current_cell = game_state->field[y] + x;
             Box *upper_cell = game_state->field[y - 1] + x;
 
             if (current_cell->state == 0 && upper_cell->state) {
-                heap_swap(current_cell, upper_cell);
+				heap_swap(current_cell, upper_cell);
             }
         }
     }
 }
-
 
 static void clear_rows(Box **field) {
 	int bottom_row = Y_FIELD_SIZE - 1;
@@ -157,6 +157,7 @@ static void clear_rows(Box **field) {
         }
     }
     memset(field[bottom_row], 0, sizeof(Box) * X_FIELD_SIZE);
+	clear_rows(field);
 }
 
 /**
@@ -209,7 +210,6 @@ static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
 	release_mutex((ValueMutex *)mutex, game_state);
 }
 
-
 static void heap_defense_input_callback(InputEvent* input_event, osMessageQueueId_t event_queue) {
 	furi_assert(event_queue);
 
@@ -227,8 +227,7 @@ static void heap_defense_timer_callback(osMessageQueueId_t event_queue) {
 	osMessageQueuePut(event_queue, &event, 0, 0);
 }
 
-
-int32_t heap_defence_app(void* p){
+int32_t heap_defence_app(void* p) {
     srand(DWT->CYCCNT);
 
     furi_log_print(FURI_LOG_ERROR, "asdfjsaklllkfjjaksdlfjkasdfjaskldjfkas\n");
@@ -249,7 +248,6 @@ int32_t heap_defence_app(void* p){
 			osTimerNew(heap_defense_timer_callback, osTimerPeriodic, event_queue, NULL);
 	osTimerStart(timer, osKernelGetTickFreq() / TIMER_UPDATE_FREQ);
 
-    // Open GUI and register view_port
     Gui* gui = furi_record_open("gui");
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
@@ -257,7 +255,6 @@ int32_t heap_defence_app(void* p){
     while (game->game_status != StatusGameExit) {
     	if (osMessageQueueGet(event_queue, &event, NULL, 100) != osOK) {
     		furi_log_print(FURI_LOG_ERROR, "queue_get_failed");
-    		++errors;
 			continue;
     	}
     	GameState *game_state = (GameState *)acquire_mutex_block(&state_mutex);
@@ -268,25 +265,24 @@ int32_t heap_defence_app(void* p){
     				game_state->game_status = StatusGameExit;
     				break;
 				case InputKeyUp:
-					game_state->person->screen_y--;// TODO bug prone
+					game_state->person->screen_y -= PERSON_STEP_PIX;// TODO bug prone
 					break;
 				case InputKeyDown:
-					game_state->person->screen_y++;
+					game_state->person->screen_y += PERSON_STEP_PIX;
 					break;
 				case InputKeyLeft:
 					game_state->person->is_going_left = -1;
-					game_state->person->screen_x-=PERSON_STEP_PIX;
+					game_state->person->screen_x -= PERSON_STEP_PIX;
 					break;
 				case InputKeyRight:
 					game_state->person->is_going_left = 1;
-					game_state->person->screen_x+=PERSON_STEP_PIX;
+					game_state->person->screen_x += PERSON_STEP_PIX;
 				default:
 					break;
     		}
     	} else if (event.type == EventGameTick) {
     		/// apply logic
-    		//move_person();
-    		//drop_box(game_state);
+    		drop_box(game_state);
     		//drop_person();
     		generate_box(game_state);
             // из-за новой логики можно чистить в конце цикла
