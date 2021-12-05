@@ -44,6 +44,7 @@ typedef enum {
     StatusWaitingForStart,
     StatusGameInProgress,
     StatusGameOver,
+    StatusPauseGame,
     StatusGameExit
 } GameStatuses;
 
@@ -78,6 +79,7 @@ typedef struct {
     Box** field;
     Person* person;
     GameStatuses game_status;
+    int horizontal_tick;
 //    byte tick_count;
 } GameState;
 
@@ -191,6 +193,7 @@ static void clear_rows(Box** field) {
  * #Person logic
  */
 
+
 static void person_set_events(Person* person, InputEvent* input) {
     //    if (person->status == PersonStatusJump || person->status == PersonStatusPush) {
     //        return;
@@ -214,6 +217,18 @@ static void person_set_events(Person* person, InputEvent* input) {
     }
 }
 
+static inline bool is_box(Box box) {
+    return box.state != 0;
+}
+
+
+static bool ground_box_check(Box* const* field, Position* new_position) {
+    bool ground_box_droped = ((*new_position).y == Y_LAST || //Eсли мы и так в самом низу
+                              !is_box(field[(*new_position).y + 1][(*new_position).x]) || // Ecли снизу пустота
+                              field[(*new_position).y + 1][(*new_position).x].offset == 0); //Eсли бокс снизу допадал
+    return ground_box_droped;
+}
+
 static bool is_moveble(Position box_pos, int x_direction, Field field) {
 
 
@@ -232,6 +247,10 @@ static bool is_moveble(Position box_pos, int x_direction, Field field) {
     return true;
 }
 
+
+
+
+
 static void horizontal_move(Person* person, Field field) {
     Position new_position = person->p;
 
@@ -249,8 +268,10 @@ static void horizontal_move(Person* person, Field field) {
 //    FURI_LOG_W(
 //        TAG, "pre_move: func: %s line: %d x:%d y:%d", __FUNCTION__, __LINE__, person->p.x, person->p.y);
 
-    if(field[new_position.y][new_position.x].state == 0) {
-        person->p = new_position;
+    if(!is_box(field[new_position.y][new_position.x])){
+        bool ground_box_droped = ground_box_check(field, &new_position);
+        if(ground_box_droped)
+            person->p = new_position;
     } else if(is_moveble(new_position, person->x_direction, field)) {
         //TODO:animation
 
@@ -266,6 +287,7 @@ static void horizontal_move(Person* person, Field field) {
 //    FURI_LOG_W(
 //        TAG, "func: %s line: %d x:%d y:%d", __FUNCTION__, __LINE__, person->p.x, person->p.y);
 }
+
 
 static inline bool on_ground(Person* person, Field field){
     return person->p.y == Y_LAST || field[person->p.y + 1][person->p.x].state != 0;
@@ -339,6 +361,26 @@ static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
         release_mutex((ValueMutex*)mutex, game_state);
         return;
     }
+    ///Pause
+    if(game_state->game_status == StatusPauseGame) {
+        FURI_LOG_W(TAG, "[DAED_DRAW]func: [%s] line: %d ", __FUNCTION__, __LINE__);
+        // Screen is 128x64 px
+        canvas_set_color(canvas, ColorWhite);
+        canvas_draw_box(canvas, 34, 20, 62, 24);
+
+        canvas_set_color(canvas, ColorBlack);
+        canvas_draw_frame(canvas, 34, 20, 62, 24);
+
+        canvas_set_font(canvas, FontPrimary);
+        canvas_draw_str(canvas, 37, 31, "Pause Game");
+
+        canvas_set_font(canvas, FontSecondary);
+        char buffer[12];
+        //        snprintf(buffer, sizeof(buffer), "Score: %u", snake_state->len - 7);
+        canvas_draw_str_aligned(canvas, 64, 41, AlignCenter, AlignBottom, buffer);
+        release_mutex((ValueMutex*)mutex, game_state);
+        return;
+    }
 
     ///Draw field
     canvas_clear(canvas);
@@ -405,7 +447,8 @@ int32_t heap_defence_app(void* p) {
             continue;
         }
         GameState* game_state = (GameState*)acquire_mutex_block(&state_mutex);
-        if(game_state->game_status == StatusGameOver){
+        if(game_state->game_status == StatusGameOver
+           || game_state->game_status == StatusPauseGame){
             FURI_LOG_W(TAG, "[STATE_CHECK]func: [%s] line: %d ", __FUNCTION__, __LINE__);
             //TODO: init_new_field
             if(event.type == EventKeyPress && event.input.key == InputKeyOk){
@@ -415,8 +458,15 @@ int32_t heap_defence_app(void* p) {
             release_mutex(&state_mutex, game_state);
             continue;
         }
+//Pause
 
         if(event.type == EventKeyPress) {
+            if(event.input.key == InputKeyOk)
+            {
+                game_state->game_status = StatusPauseGame;
+                release_mutex(&state_mutex, game_state);
+                continue;
+            }
             person_set_events(game_state->person, &(event.input));
         } else if(event.type == EventGameTick) {
             drop_box(game_state);
@@ -440,11 +490,11 @@ int32_t heap_defence_app(void* p) {
 
             generate_box(game_state);
             clear_rows(game_state->field);
-            tick_count++;
 
             if(!(tick_count % 3)) { //TODO: передвижение должно занимать Н тиков пока не реализовано(
                 person_move(game_state->person, game_state->field);
             }
+            tick_count++;
         }
         release_mutex(&state_mutex, game_state);
         view_port_update(view_port);
