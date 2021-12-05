@@ -20,11 +20,15 @@
 #define X_FIELD_SIZE 12
 #define X_LAST (X_FIELD_SIZE - 1)
 
+#define TAG "HeDe"
+
 #define BOX_HEIGHT 10
 #define BOX_WIDTH 10
 #define TIMER_UPDATE_FREQ 6
 #define BOX_DROP_RATE 5
-#define BOX_GENERATION_RATE 7
+#define BOX_GENERATION_RATE 70
+
+static int tick_count = 0;
 
 #define PERSON_HEIGHT (BOX_HEIGHT * 2) // TODO Каждый раз будет заново считать
 #define PERSON_WIDTH BOX_WIDTH
@@ -51,18 +55,17 @@ typedef enum {
 } PersonStatuses;
 
 typedef struct {
-	byte	is_going_left;
-	byte	is_jumping;
-	byte	is_walking;
-	byte	screen_x;
-	byte	screen_y;
-	PersonStatuses status;
-} Person;
+    int x;
+    int y;
+} Position;
 
 typedef struct {
-    byte x;
-    byte y;
-} Pixel;
+    int x_direction;
+    byte is_jumping;
+    byte is_walking;
+    Position p;
+    PersonStatuses status;
+} Person;
 
 typedef struct {
     byte type;
@@ -75,13 +78,12 @@ typedef struct {
     Box** field;
     Person* person;
     GameStatuses game_status;
-    byte tick_count;
+//    byte tick_count;
 } GameState;
 
-typedef enum {
-    EventKeyPress,
-    EventGameTick
-} EventType;
+typedef Box** Field;
+
+typedef enum { EventKeyPress, EventGameTick } EventType;
 
 typedef struct {
     EventType type;
@@ -98,8 +100,8 @@ GameState* allocGameState() {
     for(int y = 0; y < Y_FIELD_SIZE; ++y) {
         game_state->field[y] = furi_alloc(X_FIELD_SIZE * sizeof(Box));
     }
-    game_state->person->screen_x = 64;
-    game_state->person->screen_y = 32;
+    game_state->person->p.x = 5;
+    game_state->person->p.y = Y_LAST;
     game_state->game_status = StatusWaitingForStart;
     return game_state;
 }
@@ -119,7 +121,7 @@ void game_state_destroy(GameState* game_state) {
 
 static void generate_box(GameState const* game_state) {
     furi_assert(game_state);
-    if(game_state->tick_count % BOX_GENERATION_RATE) {
+    if(tick_count % BOX_GENERATION_RATE) {
         return;
     }
 
@@ -135,15 +137,12 @@ static void heap_swap(Box* first, Box* second) {
     *first = *second;
     *second = temp;
 }
-void dec_offset(byte * p_offset)
-{
-   if(*p_offset)
-       (*p_offset)--;
+void dec_offset(byte* p_offset) {
+    if(*p_offset) (*p_offset)--;
 }
 
 static void drop_box(GameState* game_state) {
     furi_assert(game_state);
-
 
     for(int y = Y_LAST; y > 0; y--) {
         for(int x = 0; x < X_FIELD_SIZE; x++) {
@@ -180,51 +179,119 @@ static void clear_rows(Box** field) {
  * #Person logic
  */
 
-static void move_person(Person *person, InputEvent *input) {
+static void person_set_events(Person* person, InputEvent* input) {
+    //    if (person->status == PersonStatusJump || person->status == PersonStatusPush) {
+    //        return;
+    //    }
+    switch(input->key) {
+        //		case InputKeyUp:
+        //			person->screen_y -= 2
+        //			break;
+        //		case InputKeyDown:
+        //			person->screen_y += 0;
+        //			break;
+    case InputKeyLeft:
+        FURI_LOG_W(TAG, "func: INPUT_EVENT_LEFT");
+        if(!person->x_direction) {
+            person->x_direction = -1;
+        }
+        break;
+    case InputKeyRight:
+        if(!person->x_direction) person->x_direction = 1;
+        break;
+    default:
+        break;
+    }
+}
 
-	if (person->screen_y % BOX_HEIGHT) {
-		person->screen_y += 2;
-		return;
-	}
-	if (person->is_walking || person->screen_x % BOX_WIDTH) {
-		person->screen_x += person->is_going_left ? -2 : 2;
-		person->is_walking = 0;
-	}
-	switch (input->key) {
-		case InputKeyUp:
-			person->screen_y += 2;// TODO bug prone
-			break;
-		case InputKeyDown:
-			person->screen_y += 0;
-			break;
-		case InputKeyLeft:
-			person->is_going_left = 1;
-			person->is_walking = 1;
-			break;
-		case InputKeyRight:
-			person->is_going_left = 0;
-			person->is_walking = 1;
-		default:
-			break;
-	}
+static bool is_moveble(Position box_pos, int x_direction, Field field) {
+
+
+    bool on_edge_col = box_pos.x == 0 || box_pos.x == X_LAST;
+    //TODO::Moжет и не двух, предположение
+    bool box_on_top = box_pos.y < 2 || field[box_pos.y - 1][box_pos.x].state != 0;
+
+    FURI_LOG_W(TAG, "func: [%s] line: %d on_ege: %d on_top: %d", __FUNCTION__, __LINE__, on_edge_col, box_on_top);
+    if(box_on_top || on_edge_col) return false;
+
+    bool has_next_box = field[box_pos.y][box_pos.x + x_direction].state != 0;
+
+    FURI_LOG_W(TAG, "func: [%s] line: %d has_next: %d", __FUNCTION__, __LINE__, has_next_box);
+    if(has_next_box) return false;
+
+    return true;
+}
+
+static void horizontal_move(Person* person, Field field) {
+    Position new_position = person->p;
+
+    //TODO:Check ground?
+    if(!person->x_direction) return;
+
+    FURI_LOG_W(TAG, "func: %s line: %d direction: %d", __FUNCTION__, __LINE__, person->x_direction);
+
+
+    new_position.x += person->x_direction;
+
+    bool on_edge_position = new_position.x < 0 || new_position.x > X_LAST;
+    if(on_edge_position) return;
+
+
+    FURI_LOG_W(
+        TAG, "pre_move: func: %s line: %d x:%d y:%d", __FUNCTION__, __LINE__, person->p.x, person->p.y);
+
+    if(field[new_position.y][new_position.x].state == 0) {
+        person->p = new_position;
+    } else if(is_moveble(new_position, person->x_direction, field)) {
+        //TODO:animation
+
+        FURI_LOG_W(TAG, "move:func: %s line: %d x:%d y:%d",
+                   __FUNCTION__, __LINE__, person->p.x, person->p.y);
+        field[new_position.y][new_position.x + person->x_direction] =
+            field[new_position.y][new_position.x];
+
+        field[new_position.y][new_position.x].state = 0;
+        person->p = new_position;
+    }
+
+    FURI_LOG_W(
+        TAG, "func: %s line: %d x:%d y:%d", __FUNCTION__, __LINE__, person->p.x, person->p.y);
+}
+
+static void person_move(Person* person, Field field) {
+    //    switch (person->status) {
+    //       case PersonStatusJump:
+    //           person->screen_y -= 2;
+    //           break;
+    //       case PersonStatusWalk:
+    //           person->screen_x += person->x_direction ? -2 : 2;
+    //           break;
+    //       default:
+    //           break;
+    //       }
+    /// Left-right logic
+
+    if(person->x_direction) {
+        FURI_LOG_W(TAG, "func:[%s] line: %d", __FUNCTION__, __LINE__);
+        horizontal_move(person, field);
+        person->x_direction = 0;
+    }
+
+
 }
 
 /**
  * #Callback
  */
 
-static void draw_box(Canvas* canvas, Box *box, int x, int y) {
-    if (!box->state) {
+static void draw_box(Canvas* canvas, Box* box, int x, int y) {
+    if(!box->state) {
         return;
     }
     byte y_screen = y * BOX_WIDTH - box->offset;
     byte x_screen = x * BOX_HEIGHT;
 
-    canvas_draw_frame(
-        canvas, x_screen,
-        y_screen,
-        BOX_WIDTH,
-        BOX_HEIGHT);
+    canvas_draw_frame(canvas, x_screen, y_screen, BOX_WIDTH, BOX_HEIGHT);
 }
 
 static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
@@ -239,10 +306,11 @@ static void heap_defense_render_callback(Canvas* const canvas, void* mutex) {
             draw_box(canvas, &(game_state->field[y][x]), x, y);
         }
     }
+
     canvas_draw_frame(
         canvas,
-        game_state->person->screen_x,
-        game_state->person->screen_y,
+        game_state->person->p.x * BOX_WIDTH,
+        (game_state->person->p.y - 1) * BOX_HEIGHT,
         PERSON_WIDTH,
         PERSON_HEIGHT);
     release_mutex((ValueMutex*)mutex, game_state);
@@ -268,7 +336,8 @@ static void heap_defense_timer_callback(osMessageQueueId_t event_queue) {
 int32_t heap_defence_app(void* p) {
     srand(DWT->CYCCNT);
 
-    furi_log_print(FURI_LOG_ERROR, "asdfjsaklllkfjjaksdlfjkasdfjaskldjfkas\n");
+    FURI_LOG_W(TAG, "Heap defence start %s", "hi");
+    FURI_LOG_W(TAG, "Heap defence start %d", __LINE__);
     osMessageQueueId_t event_queue = osMessageQueueNew(8, sizeof(GameEvent), NULL);
     GameState* game = allocGameState();
 
@@ -289,31 +358,35 @@ int32_t heap_defence_app(void* p) {
     gui_add_view_port(gui, view_port, GuiLayerFullscreen);
 
     GameEvent event = {.type = 0, .input = {0}};
-    while (event.input.key != InputKeyBack) { /// ATTENTION
-    	if (osMessageQueueGet(event_queue, &event, NULL, 100) != osOK) {
-			continue;
-    	}
-    	GameState *game_state = (GameState *)acquire_mutex_block(&state_mutex);
-    	if (event.type == EventKeyPress) {
-    		move_person(game_state, &(event.input));
-    	} else if (event.type == EventGameTick) {
-    		drop_box(game_state);
-    		generate_box(game_state);
-    		clear_rows(game_state->field);
-    		game_state->tick_count++;
-    	}
-		release_mutex(&state_mutex, game_state);
-    	view_port_update(view_port);
+    while(event.input.key != InputKeyBack) { /// ATTENTION
+        if(osMessageQueueGet(event_queue, &event, NULL, 100) != osOK) {
+            continue;
+        }
+        GameState* game_state = (GameState*)acquire_mutex_block(&state_mutex);
+        if(event.type == EventKeyPress) {
+            person_set_events(game_state->person, &(event.input));
+        } else if(event.type == EventGameTick) {
+            drop_box(game_state);
+            generate_box(game_state);
+            clear_rows(game_state->field);
+            tick_count++;
+
+            if(!(tick_count % 3)) { //TODO: передвижение должно занимать Н тиков пока не реализовано(
+                person_move(game_state->person, game_state->field);
+            }
+        }
+        release_mutex(&state_mutex, game_state);
+        view_port_update(view_port);
     }
 
-	osTimerDelete(timer);
-	view_port_enabled_set(view_port, false);
-	gui_remove_view_port(gui, view_port);
-	furi_record_close("gui");
-	view_port_free(view_port);
-	osMessageQueueDelete(event_queue);
-	delete_mutex(&state_mutex);
-	game_state_destroy(game);
+    osTimerDelete(timer);
+    view_port_enabled_set(view_port, false);
+    gui_remove_view_port(gui, view_port);
+    furi_record_close("gui");
+    view_port_free(view_port);
+    osMessageQueueDelete(event_queue);
+    delete_mutex(&state_mutex);
+    game_state_destroy(game);
 
-	return 0;
+    return 0;
 }
