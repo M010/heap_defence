@@ -61,7 +61,7 @@ typedef struct {
 
 typedef struct {
     int x_direction;
-    byte is_jumping;
+    byte do_jump;
     byte is_walking;
     Position p;
     PersonStatuses status;
@@ -184,12 +184,10 @@ static void person_set_events(Person* person, InputEvent* input) {
     //        return;
     //    }
     switch(input->key) {
-        //		case InputKeyUp:
-        //			person->screen_y -= 2
-        //			break;
-        //		case InputKeyDown:
-        //			person->screen_y += 0;
-        //			break;
+    case InputKeyUp:
+        //TODO: может лучше будет выставлять когда персонаж не идет
+        person->do_jump = 1;
+        break;
     case InputKeyLeft:
         FURI_LOG_W(TAG, "func: INPUT_EVENT_LEFT");
         if(!person->x_direction) {
@@ -230,7 +228,6 @@ static void horizontal_move(Person* person, Field field) {
 
     FURI_LOG_W(TAG, "func: %s line: %d direction: %d", __FUNCTION__, __LINE__, person->x_direction);
 
-
     new_position.x += person->x_direction;
 
     bool on_edge_position = new_position.x < 0 || new_position.x > X_LAST;
@@ -258,27 +255,36 @@ static void horizontal_move(Person* person, Field field) {
         TAG, "func: %s line: %d x:%d y:%d", __FUNCTION__, __LINE__, person->p.x, person->p.y);
 }
 
-static void person_move(Person* person, Field field) {
-    //    switch (person->status) {
-    //       case PersonStatusJump:
-    //           person->screen_y -= 2;
-    //           break;
-    //       case PersonStatusWalk:
-    //           person->screen_x += person->x_direction ? -2 : 2;
-    //           break;
-    //       default:
-    //           break;
-    //       }
-    /// Left-right logic
+static inline bool on_ground(Person* person, Field field){
+    return person->p.y == Y_LAST || field[person->p.y + 1][person->p.x].state != 0;
+}
 
+static void jump_move(Person* person, Field field) {
+   if(!on_ground(person, field))
+       return;
+   person->p.y--;
+}
+
+static void person_move(Person* person, Field field) {
+
+    /// Left-right logic
     if(person->x_direction) {
-        FURI_LOG_W(TAG, "func:[%s] line: %d", __FUNCTION__, __LINE__);
-        horizontal_move(person, field);
+        FURI_LOG_W(TAG, "[MOVE]func:[%s] line: %d", __FUNCTION__, __LINE__);
+        horizontal_move(person, field)+;
         person->x_direction = 0;
     }
 
 
+    ///Jump logic
+    if(person->do_jump) {
+        FURI_LOG_W(TAG, "[JUMP]func:[%s] line: %d", __FUNCTION__, __LINE__);
+        jump_move(person, field);
+        person->do_jump = 0;
+    }
+
+
 }
+
 
 /**
  * #Callback
@@ -367,6 +373,14 @@ int32_t heap_defence_app(void* p) {
             person_set_events(game_state->person, &(event.input));
         } else if(event.type == EventGameTick) {
             drop_box(game_state);
+            //TODO:заглушка, нужно сделать синхронизацию
+            ///Person_drop
+            if(!(tick_count % 15)) {
+               if(!on_ground(game_state->person, game_state->field)) {
+                   game_state->person->p.y++;
+               }
+            }
+
             generate_box(game_state);
             clear_rows(game_state->field);
             tick_count++;
